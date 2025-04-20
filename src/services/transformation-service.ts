@@ -1,4 +1,6 @@
-const transformText = (value, type) => {
+type TransformationType = 'TO_UPPER_CASE' | 'TO_LOWER_CASE';
+
+const transformText = (value: string, type: TransformationType): string => {
   switch (type) {
     case 'TO_UPPER_CASE':
       return value.toUpperCase();
@@ -9,4 +11,4 @@ const transformText = (value, type) => {
   }
 };
 
-module.exports = { transformText };
+export { transformText, TransformationType };

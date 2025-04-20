@@ -3,22 +3,31 @@
   "version": "0.0.1",
   "license": "MIT",
   "scripts": {
-    "start": "node ./src/app.js",
+    "start": "node dist/app.js",
     "dev": "npm run stop && concurrently \"npm run server\" \"npm run expose\"",
-    "server": "nodemon ./src/app.js",
+    "server": "nodemon --exec ts-node src/app.ts",
     "expose": "mapps tunnel:create -p 8302 -a 10380024",
-    "stop": "kill-port 8302"
+    "stop": "kill-port 8302",
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "clean": "rimraf dist",
+    "prebuild": "npm run clean"
   },
   "nodemonConfig": {
     "watch": [
       ".env",
       "src/"
-    ]
+    ],
+    "ext": "ts,json",
+    "ignore": [
+      "src/**/*.spec.ts"
+    ],
+    "exec": "ts-node ./src/app.ts"
   },
   "dependencies": {
     "body-parser": "^1.19.0",
     "cross-port-killer": "^1.2.1",
-    "dotenv": "^5.0.1",
+    "dotenv": "^16.5.0",
     "express": "^4.17.1",
     "jsonwebtoken": "^9.0.0",
     "monday-sdk-js": "^0.5.4",
@@ -26,9 +35,18 @@
   },
   "devDependencies": {
     "@mondaycom/apps-cli": "^4.0.0",
+    "@types/body-parser": "^1.19.5",
+    "@types/dotenv": "^8.2.0",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.5",
     "concurrently": "^8.2.2",
     "debug": "~2.6.9",
     "eslint": "^v6.8.0",
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "rimraf": "^5.0.10",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.3.3"
   }
 }
