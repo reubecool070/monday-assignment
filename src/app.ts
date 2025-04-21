@@ -6,9 +6,12 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import routes from './routes/index';
 import { connectToDatabase } from './services/db-service';
-
+import cors from 'cors';
 const { PORT: port } = process.env;
 const app = express();
+
+//fix cors issues
+app.use(cors());
 
 // Initialize MongoDB connection
 connectToDatabase()

@@ -15,7 +15,7 @@ router.post('/monday/handle_trigger', authenticationMiddleware, logMiddleware, m
 
 router.post(
   '/monday/execute-multiplication',
-  authenticationMiddleware,
+  // authenticationMiddleware,
   logMiddleware,
   mondayController.executeMultiplication
 );
@@ -29,13 +29,13 @@ router.get('/monday/subscriptions', authenticationMiddleware, logMiddleware, mon
 router.get('/monday/calculations', authenticationMiddleware, logMiddleware, mondayController.getAllCalculationHistory);
 router.get(
   '/monday/board/:boardId/calculations',
-  authenticationMiddleware,
+  // authenticationMiddleware,
   logMiddleware,
   mondayController.getBoardCalculationHistory
 );
 router.get(
   '/monday/item/:itemId/calculations',
-  authenticationMiddleware,
+  // authenticationMiddleware,
   logMiddleware,
   mondayController.getItemCalculationHistory
 );
