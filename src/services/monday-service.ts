@@ -280,4 +280,217 @@ const getAllColumnValuesForItem = async (token: string, itemId: string): Promise
   }
 };
 
-export { getColumnValue, changeColumnValue, getBoardIdForItem, getAllColumnValuesForItem, getColumnValueAsNumber };
+// Subscription management methods
+const createSubscription = async (
+  token: string,
+  webhookUrl: string,
+  event: string,
+  boardId?: number,
+  columnId?: string
+): Promise<string | null> => {
+  try {
+    const mondayClient = mondaySdk();
+    mondayClient.setToken(token);
+    mondayClient.setApiVersion('2024-01');
+
+    // Build the subscription config based on provided parameters
+    const config: Record<string, any> = {};
+
+    if (boardId) {
+      config.board_id = boardId;
+    }
+
+    if (columnId) {
+      config.column_id = columnId;
+    }
+
+    // Monday.com's subscription mutation
+    // Note: The query now uses null for board_id parameter since we're using config
+    const query = `mutation createSubscription($webhookUrl: String!, $event: String!, $config: JSON) {
+      create_webhook(board_id: null, url: $webhookUrl, event: $event, config: $config) {
+        id
+      }
+    }`;
+
+    // Don't stringify the config - Monday SDK handles this
+    const variables = {
+      webhookUrl,
+      event,
+      config,
+    };
+
+    console.log('Creating subscription with variables:', JSON.stringify(variables, null, 2));
+
+    try {
+      const response = await mondayClient.api(query, { variables });
+      console.log('Subscription creation raw response:', JSON.stringify(response, null, 2));
+
+      if (response?.data?.create_webhook?.id) {
+        return response.data.create_webhook.id;
+      } else if (response?.data?.create_webhook?.error) {
+        console.error('Monday.com API returned errors:', JSON.stringify(response.data.create_webhook.error, null, 2));
+        return null;
+      } else {
+        console.error('Unexpected response format:', JSON.stringify(response, null, 2));
+        return null;
+      }
+    } catch (apiError) {
+      console.error('Monday.com API error during subscription creation:', apiError);
+      if (apiError instanceof Error) {
+        console.error('API Error message:', apiError.message);
+        console.error('API Error stack:', apiError.stack);
+      }
+      return null;
+    }
+  } catch (err) {
+    console.error('Error creating subscription:', err);
+    if (err instanceof Error) {
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+    }
+    return null;
+  }
+};
+
+const deleteSubscription = async (token: string, subscriptionId: string): Promise<boolean> => {
+  try {
+    const mondayClient = mondaySdk();
+    mondayClient.setToken(token);
+    mondayClient.setApiVersion('2024-01');
+
+    // Make sure we have a valid subscription ID
+    const parsedId = parseInt(subscriptionId, 10);
+    if (isNaN(parsedId)) {
+      console.error('Invalid subscription ID format:', subscriptionId);
+      return false;
+    }
+
+    // Monday.com's delete webhook mutation
+    const query = `mutation deleteWebhook($id: Int!) {
+      delete_webhook(id: $id) {
+        id
+      }
+    }`;
+
+    const variables = { id: parsedId };
+
+    console.log('Deleting subscription with variables:', JSON.stringify(variables, null, 2));
+
+    try {
+      const response = await mondayClient.api(query, { variables });
+      console.log('Subscription deletion raw response:', JSON.stringify(response, null, 2));
+
+      if (response?.data?.delete_webhook?.id) {
+        return true;
+      } else if (response?.data?.delete_webhook?.error) {
+        console.error(
+          'Monday.com API returned errors during deletion:',
+          JSON.stringify(response.data.delete_webhook.error, null, 2)
+        );
+        return false;
+      } else {
+        console.error('Unexpected response format during deletion:', JSON.stringify(response, null, 2));
+        return false;
+      }
+    } catch (apiError) {
+      console.error('Monday.com API error during subscription deletion:', apiError);
+      if (apiError instanceof Error) {
+        console.error('API Error message:', apiError.message);
+        console.error('API Error stack:', apiError.stack);
+      }
+      return false;
+    }
+  } catch (err) {
+    console.error('Error deleting subscription:', err);
+    if (err instanceof Error) {
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+    }
+    return false;
+  }
+};
+
+// List all active webhooks
+const listSubscriptions = async (token: string): Promise<any[] | null> => {
+  try {
+    const mondayClient = mondaySdk();
+    mondayClient.setToken(token);
+    mondayClient.setApiVersion('2024-01');
+
+    // Monday.com's query to list webhooks
+    const query = `query {
+      webhooks {
+        id
+        board_id
+        app_id
+        url
+        event
+        config
+      }
+    }`;
+
+    const response = await mondayClient.api(query);
+    console.log('List subscriptions response:', response);
+
+    if (response?.data?.webhooks) {
+      return response.data.webhooks;
+    }
+
+    return null;
+  } catch (err) {
+    console.error('Error listing subscriptions:', err);
+    return null;
+  }
+};
+
+const getBoardItems = async (token: string, boardId: string): Promise<Item[] | undefined> => {
+  try {
+    const mondayClient = mondaySdk();
+    mondayClient.setToken(token);
+    mondayClient.setApiVersion('2024-04');
+
+    const query = `query($boardId: [ID!]) {
+      boards(ids: $boardId) {
+        items {
+          id
+          name
+          column_values {
+            id
+            title
+            text
+            value
+          }
+        }
+      }
+    }`;
+    const variables = { boardId };
+
+    const response = await mondayClient.api(query, { variables });
+    console.log('Board items query response:', JSON.stringify(response?.data?.boards?.[0]?.items?.length, null, 2));
+
+    if (response?.data?.boards?.[0]?.items) {
+      return response.data.boards[0].items;
+    }
+
+    return undefined;
+  } catch (err) {
+    console.error('Error getting board items:', err);
+    if (err instanceof Error) {
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+    }
+    return undefined;
+  }
+};
+
+export {
+  getColumnValue,
+  changeColumnValue,
+  getBoardIdForItem,
+  getAllColumnValuesForItem,
+  getColumnValueAsNumber,
+  createSubscription,
+  deleteSubscription,
+  listSubscriptions,
+  getBoardItems,
+};

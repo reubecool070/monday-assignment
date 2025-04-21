@@ -20,4 +20,9 @@ router.post(
   mondayController.executeMultiplication
 );
 
+router.post('/monday/subscribe', authenticationMiddleware, logMiddleware, mondayController.subscribe);
+router.post('/monday/unsubscribe', authenticationMiddleware, logMiddleware, mondayController.unsubscribe);
+router.post('/monday/webhook', logMiddleware, mondayController.handleWebhook);
+router.get('/monday/subscriptions', authenticationMiddleware, logMiddleware, mondayController.listAllSubscriptions);
+
 export default router;

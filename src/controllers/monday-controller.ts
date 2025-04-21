@@ -4,6 +4,7 @@ import * as transformationService from '../services/transformation-service';
 import { TRANSFORMATION_TYPES } from '../constants/transformation';
 import { AuthenticatedRequest } from '../middlewares/authentication';
 import { TransformationType } from '../services/transformation-service';
+import { Request } from 'express';
 
 interface ActionPayload {
   inputFields: {
@@ -41,6 +42,18 @@ interface RequestBody {
   payload: ActionPayload;
 }
 
+// New interface for webhook subscription payload
+interface SubscriptionPayload {
+  clientId: string;
+  webhookUrl: string;
+  boardId?: number;
+  userId?: number;
+  itemId?: number;
+  columnId?: string;
+  event: string;
+  config?: Record<string, any>;
+}
+
 async function executeAction(req: AuthenticatedRequest, res: Response): Promise<Response> {
   console.log('executeAction');
   const { shortLivedToken } = req.session || {};
@@ -76,15 +89,48 @@ async function executeAction(req: AuthenticatedRequest, res: Response): Promise<
 async function executeMultiplication(req: AuthenticatedRequest, res: Response): Promise<Response> {
   console.log('executeMultiplication');
   const { shortLivedToken } = req.session || {};
-  const { payload } = req.body as RequestBody;
+  const payload = req.body.payload || req.body;
 
   try {
     if (!shortLivedToken) {
       return res.status(401).send({ message: 'Unauthorized' });
     }
 
-    const { inputFields } = payload;
-    const { boardId, itemId, sourceColumnId, factorColumnId, targetColumnId } = inputFields;
+    // Log the full request body for debugging
+    console.log('Multiplication request body:', JSON.stringify(req.body, null, 2));
+
+    // Handle different payload formats
+    let inputFields;
+    let itemId;
+    let boardId;
+
+    // Check if this is an automation trigger payload
+    if (payload.inboundFieldValues) {
+      // Automation trigger format
+      inputFields = {
+        ...payload.inputFields,
+        ...payload.inboundFieldValues,
+      };
+
+      // For automation triggers, we might need to extract these from different places
+      itemId = payload.itemId || (payload.inboundFieldValues && payload.inboundFieldValues.itemId);
+      boardId = payload.boardId;
+    } else {
+      // Standard action format
+      inputFields = payload.inputFields;
+      boardId = inputFields.boardId;
+      itemId = inputFields.itemId;
+    }
+
+    if (!inputFields) {
+      console.error('Invalid request: Missing inputFields');
+      return res.status(400).send({ message: 'Missing input fields' });
+    }
+
+    // Extract column IDs from the input fields, making sourceColumnId and targetColumnId mutable
+    const { factorColumnId } = inputFields;
+    let { sourceColumnId, targetColumnId } = inputFields;
+
     console.log('Processing multiplication with inputs:', {
       boardId,
       itemId,
@@ -92,6 +138,49 @@ async function executeMultiplication(req: AuthenticatedRequest, res: Response): 
       factorColumnId,
       targetColumnId,
     });
+
+    // Validate required fields
+    if (!sourceColumnId || !factorColumnId) {
+      console.error('Missing required column IDs');
+      return res.status(400).send({
+        message: 'Missing required fields',
+        required: ['sourceColumnId', 'factorColumnId'],
+      });
+    }
+
+    // If we don't have itemId, try to get it from the board
+    if (!itemId && boardId) {
+      console.log('No item ID provided, attempting to use the first item from the board');
+      // We'll directly get the board items instead of using a separate function
+      const firstItem = await mondayService.getBoardItems(shortLivedToken, boardId);
+      if (firstItem && firstItem.length > 0) {
+        itemId = firstItem[0].id;
+        console.log(`Using first item from board: ${itemId}`);
+      }
+    }
+
+    if (!itemId) {
+      console.error('Missing required item ID');
+      return res.status(400).send({ message: 'Missing item ID' });
+    }
+
+    if (!boardId) {
+      console.log('No board ID provided, attempting to find board ID for item');
+      boardId = await mondayService.getBoardIdForItem(shortLivedToken, itemId);
+
+      if (!boardId) {
+        console.error('Could not determine board ID');
+        return res.status(400).send({ message: 'Could not determine board ID' });
+      }
+
+      console.log(`Determined board ID: ${boardId}`);
+    }
+
+    // If no target column specified, we'll use the source column
+    if (!targetColumnId) {
+      console.log('No target column specified, using source column');
+      targetColumnId = sourceColumnId;
+    }
 
     const input_number = await mondayService.getColumnValueAsNumber(shortLivedToken, itemId, sourceColumnId);
     const factor_number = await mondayService.getColumnValueAsNumber(shortLivedToken, itemId, factorColumnId);
@@ -119,10 +208,24 @@ async function executeMultiplication(req: AuthenticatedRequest, res: Response): 
     // The changeColumnValue service now handles formatting based on column type
     await mondayService.changeColumnValue(shortLivedToken, boardId, itemId, targetColumnId, result.toString());
 
-    return res.status(200).send({
-      success: true,
-      result,
-    });
+    // Handle different response formats based on request type
+    if (payload.inboundFieldValues) {
+      // For automation triggers, use a simpler success response
+      return res.status(200).send({
+        success: true,
+      });
+    } else {
+      // For standard actions, include more details
+      return res.status(200).send({
+        success: true,
+        result,
+        boardId,
+        itemId,
+        sourceColumnId,
+        factorColumnId,
+        targetColumnId,
+      });
+    }
   } catch (err) {
     console.error('Error in executeMultiplication:', err);
     return res.status(500).send({ message: 'internal server error' });
@@ -179,4 +282,275 @@ async function getRemoteListOptions(req: AuthenticatedRequest, res: Response): P
   }
 }
 
-export { executeAction, getRemoteListOptions, handleTrigger, executeMultiplication };
+async function subscribe(req: AuthenticatedRequest, res: Response): Promise<Response> {
+  console.log('subscribe endpoint called');
+  const { shortLivedToken } = req.session || {};
+
+  try {
+    // Log the request body to help debugging
+    console.log('Subscribe request body:', JSON.stringify(req.body, null, 2));
+
+    if (!shortLivedToken) {
+      console.error('Authentication error: No shortLivedToken in session');
+      return res.status(401).send({
+        message: 'Unauthorized',
+        error: 'Missing authentication token',
+      });
+    }
+
+    // Handle the automation system payload format
+    const payload = req.body.payload;
+    if (!payload) {
+      console.error('Invalid request format: Missing payload object');
+      return res.status(400).send({
+        message: 'Invalid request format',
+        error: 'Missing payload object',
+      });
+    }
+
+    // Extract relevant information from the automation payload
+    const { webhookUrl, subscriptionId, recipeId, integrationId, inputFields } = payload;
+
+    // For automation payloads, the webhook URL is typically provided
+    if (!webhookUrl) {
+      console.error('Subscribe validation error: Missing webhookUrl');
+      return res.status(400).send({
+        message: 'Missing required parameter: webhookUrl',
+        error: 'A valid webhook URL is required',
+      });
+    }
+
+    // Determine the board ID and column IDs from the payload if available
+    const boardId = payload.boardId;
+    let columnIds = [];
+
+    // Extract column IDs from the input fields
+    if (inputFields) {
+      // Collect all column IDs mentioned in the input fields
+      Object.entries(inputFields).forEach(([key, value]) => {
+        if (key.includes('ColumnId') && typeof value === 'string') {
+          columnIds.push(value);
+        }
+      });
+    }
+
+    console.log('Subscription request processed from automation payload:', {
+      webhookUrl,
+      subscriptionId,
+      recipeId,
+      integrationId,
+      boardId: boardId ? Number(boardId) : undefined,
+      columnIds,
+    });
+
+    // If we already have a subscription ID, no need to create a new one
+    if (subscriptionId) {
+      console.log('Subscription already exists with ID:', subscriptionId);
+      return res.status(200).send({
+        message: 'Subscription already exists',
+        subscriptionId,
+        status: 'success',
+      });
+    }
+
+    // For automation payloads, we'll just return success without creating an actual webhook
+    // as Monday.com's automation system handles this differently
+    return res.status(200).send({
+      message: 'Automation subscription processed successfully',
+      success: true,
+      webhookUrl,
+      recipeId,
+      integrationId,
+    });
+  } catch (err) {
+    console.error('Unhandled error in subscribe controller:');
+    console.error(err);
+
+    if (err instanceof Error) {
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+
+      return res.status(500).send({
+        message: 'Internal server error',
+        error: err.message,
+      });
+    }
+
+    return res.status(500).send({
+      message: 'Internal server error',
+      error: 'Unknown error occurred',
+    });
+  }
+}
+
+async function unsubscribe(req: AuthenticatedRequest, res: Response): Promise<Response> {
+  console.log('unsubscribe');
+  const { shortLivedToken } = req.session || {};
+
+  try {
+    if (!shortLivedToken) {
+      return res.status(401).send({ message: 'Unauthorized' });
+    }
+
+    const { subscriptionId } = req.body;
+
+    if (!subscriptionId) {
+      return res.status(400).send({
+        message: 'Missing required parameter: subscriptionId',
+      });
+    }
+
+    console.log('Unsubscribing webhook:', subscriptionId);
+
+    // Call Monday.com API to delete the subscription
+    const success = await mondayService.deleteSubscription(shortLivedToken, subscriptionId);
+
+    if (!success) {
+      return res.status(500).send({
+        message: 'Failed to delete subscription',
+        details: 'Check server logs for more information',
+      });
+    }
+
+    return res.status(200).send({
+      message: 'Subscription deleted successfully',
+      subscriptionId,
+    });
+  } catch (err) {
+    console.error('Error deleting subscription:', err);
+    return res.status(500).send({ message: 'Internal server error' });
+  }
+}
+
+async function handleWebhook(req: Request, res: Response): Promise<Response> {
+  try {
+    console.log('Received webhook:', JSON.stringify(req.body, null, 2));
+
+    const webhookData = req.body;
+
+    // You don't necessarily need authentication here as this is a webhook from Monday.com
+    // Process the webhook data based on event type
+
+    if (webhookData.event && webhookData.event.type) {
+      const eventType = webhookData.event.type;
+
+      switch (eventType) {
+        case 'create_item':
+          await processItemCreation(webhookData);
+          break;
+
+        case 'update_column_value':
+          await processColumnUpdate(webhookData);
+          break;
+
+        // Add more event types as needed
+
+        default:
+          console.log(`Unhandled event type: ${eventType}`);
+      }
+    }
+
+    // Always respond with 200 OK to acknowledge receipt of the webhook
+    return res.status(200).send({
+      status: 'success',
+      message: 'Webhook received and processed',
+    });
+  } catch (err) {
+    console.error('Error handling webhook:', err);
+    // Still return 200 to avoid Monday.com retrying the webhook
+    return res.status(200).send({
+      status: 'error',
+      message: 'Error processing webhook, but received',
+    });
+  }
+}
+
+// Helper functions for webhook processing
+async function processItemCreation(webhookData: any): Promise<void> {
+  try {
+    const { event, itemId, boardId } = webhookData;
+    console.log(`Processing item creation: Item ${itemId} on Board ${boardId}`);
+
+    // Implement your business logic for item creation here
+    // For example, you might want to initialize certain column values or
+    // trigger other integrations
+  } catch (err) {
+    console.error('Error processing item creation:', err);
+  }
+}
+
+async function processColumnUpdate(webhookData: any): Promise<void> {
+  try {
+    const { event, itemId, boardId, columnId, value } = webhookData;
+    console.log(`Processing column update: Item ${itemId}, Column ${columnId}, New value: ${value}`);
+
+    // Implement your business logic for column updates here
+    // For example, you might want to trigger calculations or
+    // synchronize data with other systems
+  } catch (err) {
+    console.error('Error processing column update:', err);
+  }
+}
+
+async function listAllSubscriptions(req: AuthenticatedRequest, res: Response): Promise<Response> {
+  console.log('listAllSubscriptions endpoint called');
+  const { shortLivedToken } = req.session || {};
+
+  try {
+    if (!shortLivedToken) {
+      console.error('Authentication error: No shortLivedToken in session');
+      return res.status(401).send({
+        message: 'Unauthorized',
+        error: 'Missing authentication token',
+      });
+    }
+
+    console.log('Requesting all subscriptions from Monday.com API');
+
+    const subscriptions = await mondayService.listSubscriptions(shortLivedToken);
+
+    if (!subscriptions) {
+      console.error('Failed to retrieve subscriptions list');
+      return res.status(500).send({
+        message: 'Failed to retrieve subscriptions',
+        error: 'The Monday.com API did not return subscription data',
+      });
+    }
+
+    console.log(`Successfully retrieved ${subscriptions.length} subscriptions`);
+    return res.status(200).send({
+      message: 'Subscriptions retrieved successfully',
+      count: subscriptions.length,
+      subscriptions,
+    });
+  } catch (err) {
+    console.error('Unhandled error in listAllSubscriptions controller:');
+    console.error(err);
+
+    if (err instanceof Error) {
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+
+      return res.status(500).send({
+        message: 'Internal server error',
+        error: err.message,
+      });
+    }
+
+    return res.status(500).send({
+      message: 'Internal server error',
+      error: 'Unknown error occurred',
+    });
+  }
+}
+
+export {
+  executeAction,
+  getRemoteListOptions,
+  handleTrigger,
+  executeMultiplication,
+  subscribe,
+  unsubscribe,
+  handleWebhook,
+  listAllSubscriptions,
+};
