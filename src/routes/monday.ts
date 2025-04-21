@@ -25,4 +25,19 @@ router.post('/monday/unsubscribe', authenticationMiddleware, logMiddleware, mond
 router.post('/monday/webhook', logMiddleware, mondayController.handleWebhook);
 router.get('/monday/subscriptions', authenticationMiddleware, logMiddleware, mondayController.listAllSubscriptions);
 
+// New routes for calculation history with MongoDB
+router.get('/monday/calculations', authenticationMiddleware, logMiddleware, mondayController.getAllCalculationHistory);
+router.get(
+  '/monday/board/:boardId/calculations',
+  authenticationMiddleware,
+  logMiddleware,
+  mondayController.getBoardCalculationHistory
+);
+router.get(
+  '/monday/item/:itemId/calculations',
+  authenticationMiddleware,
+  logMiddleware,
+  mondayController.getItemCalculationHistory
+);
+
 export default router;

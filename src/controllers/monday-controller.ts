@@ -5,6 +5,7 @@ import { TRANSFORMATION_TYPES } from '../constants/transformation';
 import { AuthenticatedRequest } from '../middlewares/authentication';
 import { TransformationType } from '../services/transformation-service';
 import { Request } from 'express';
+import * as calculationService from '../services/calculation-service';
 
 interface ActionPayload {
   inputFields: {
@@ -207,6 +208,25 @@ async function executeMultiplication(req: AuthenticatedRequest, res: Response): 
 
     // The changeColumnValue service now handles formatting based on column type
     await mondayService.changeColumnValue(shortLivedToken, boardId, itemId, targetColumnId, result.toString());
+
+    // Log calculation to MongoDB
+    const accountId = req.session?.accountId; // Get account ID if available from session
+
+    const calculationData = {
+      itemId,
+      boardId,
+      sourceColumnId,
+      sourceValue: input_number,
+      factorColumnId,
+      factorValue: factor_number,
+      targetColumnId,
+      result,
+      operation: 'multiplication',
+      accountId: accountId as string,
+    };
+
+    // Log the calculation to MongoDB
+    await calculationService.logCalculation(calculationData);
 
     // Handle different response formats based on request type
     if (payload.inboundFieldValues) {
@@ -544,6 +564,89 @@ async function listAllSubscriptions(req: AuthenticatedRequest, res: Response): P
   }
 }
 
+// Add new endpoint to get calculation history for an item
+async function getItemCalculationHistory(req: AuthenticatedRequest, res: Response): Promise<Response> {
+  console.log('getItemCalculationHistory');
+  try {
+    // Extract the itemId from the request
+    const itemId = req.params.itemId;
+
+    if (!itemId) {
+      return res.status(400).send({ message: 'Missing item ID' });
+    }
+
+    // Extract optional limit parameter
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+
+    console.log(`Retrieving calculation history for item: ${itemId}`);
+
+    // Get the calculation history for this item
+    const history = await calculationService.getCalculationHistoryForItem(itemId, limit);
+
+    return res.status(200).send({
+      itemId,
+      count: history.length,
+      history,
+    });
+  } catch (err) {
+    console.error('Error retrieving item calculation history:', err);
+    return res.status(500).send({ message: 'internal server error' });
+  }
+}
+
+// Add new endpoint to get calculation history for a board
+async function getBoardCalculationHistory(req: AuthenticatedRequest, res: Response): Promise<Response> {
+  console.log('getBoardCalculationHistory');
+  try {
+    // Extract the boardId from the request
+    const boardId = req.params.boardId;
+
+    if (!boardId) {
+      return res.status(400).send({ message: 'Missing board ID' });
+    }
+
+    // Extract optional limit parameter
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+
+    console.log(`Retrieving calculation history for board: ${boardId}`);
+
+    // Get the calculation history for this board
+    const history = await calculationService.getCalculationHistoryForBoard(boardId, limit);
+
+    return res.status(200).send({
+      boardId,
+      count: history.length,
+      history,
+    });
+  } catch (err) {
+    console.error('Error retrieving board calculation history:', err);
+    return res.status(500).send({ message: 'internal server error' });
+  }
+}
+
+// Add new endpoint to get all calculation history with pagination
+async function getAllCalculationHistory(req: AuthenticatedRequest, res: Response): Promise<Response> {
+  console.log('getAllCalculationHistory');
+  try {
+    // Extract pagination parameters
+    const page = req.query.page ? parseInt(req.query.page as string) : 1;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+
+    // Get account ID from session if available for filtering
+    const accountId = req.query.accountId || req.session?.accountId;
+
+    console.log(`Retrieving all calculation history (page ${page}, limit ${limit})`);
+
+    // Get all calculation history with pagination
+    const result = await calculationService.getAllCalculationHistory(limit, page, accountId as string);
+
+    return res.status(200).send(result);
+  } catch (err) {
+    console.error('Error retrieving all calculation history:', err);
+    return res.status(500).send({ message: 'internal server error' });
+  }
+}
+
 export {
   executeAction,
   getRemoteListOptions,
@@ -553,4 +656,7 @@ export {
   unsubscribe,
   handleWebhook,
   listAllSubscriptions,
+  getItemCalculationHistory,
+  getBoardCalculationHistory,
+  getAllCalculationHistory,
 };
