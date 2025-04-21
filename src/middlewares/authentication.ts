@@ -35,5 +35,9 @@ async function authenticationMiddleware(req: AuthenticatedRequest, res: Response
     res.status(500).json({ error: 'not authenticated' });
   }
 }
+function logMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+  console.log('middleware', req.body);
+  next();
+}
 
-export { authenticationMiddleware, AuthenticatedRequest, SessionData };
+export { authenticationMiddleware, AuthenticatedRequest, SessionData, logMiddleware };
