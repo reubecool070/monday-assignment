@@ -1,0 +1,36 @@
+{
+  "name": "custom-item-view",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "start": "npm run stop && concurrently \"npm run dev\" \"npm run expose\"",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "expose": "ngrok http 8301",
+    "stop": "kill-port 8301 && kill-port 4049 && kill-port 4040"
+  },
+  "dependencies": {
+    "@testing-library/jest-dom": "^4.2.4",
+    "@testing-library/react": "^9.5.0",
+    "@vibe/core": "^3.42.0",
+    "@vibe/icons": "^1.7.0",
+    "bootstrap": "^5.2.2",
+    "eslint-config-react-app": "^7.0.1",
+    "monday-sdk-js": "^0.1.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/monday-sdk-js": "^0.2.1",
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^4.0.3",
+    "concurrently": "^5.2.0",
+    "cross-port-killer": "^1.2.1",
+    "ngrok": "^4.2.0",
+    "typescript": "^5.8.3",
+    "vite": "^4.4.5"
+  }
+}
