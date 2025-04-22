@@ -35,7 +35,7 @@ router.get(
   mondayController.getBoardCalculationHistory
 );
 router.get(
-  '/monday/item/:itemId/calculations',
+  '/monday/item/history',
   // authenticationMiddleware,
   logMiddleware,
   mondayController.getItemCalculationHistory

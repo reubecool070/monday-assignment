@@ -152,21 +152,21 @@ function ItemView() {
     // Create missing columns
     if (!inputColumn) {
       const res = await monday.api(
-        `mutation { create_column (board_id: ${boardId}, title: "Input Number", column_type: number) { id } }`
+        `mutation { create_column (board_id: ${boardId}, title: "Input Number", column_type: numbers) { id } }`
       );
       inputColumn = res.data.create_column.id;
     }
 
     if (!factorColumn) {
       const res = await monday.api(
-        `mutation { create_column (board_id: ${boardId}, title: "Multiplication Factor", column_type: number) { id } }`
+        `mutation { create_column (board_id: ${boardId}, title: "Multiplication Factor", column_type: numbers) { id } }`
       );
       factorColumn = res.data.create_column.id;
     }
 
     if (!resultColumn) {
       const res = await monday.api(
-        `mutation { create_column (board_id: ${boardId}, title: "Result", column_type: number) { id } }`
+        `mutation { create_column (board_id: ${boardId}, title: "Result", column_type: numbers) { id } }`
       );
       resultColumn = res.data.create_column.id;
     }

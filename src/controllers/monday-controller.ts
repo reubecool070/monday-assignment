@@ -56,7 +56,6 @@ interface SubscriptionPayload {
 }
 
 async function executeAction(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('executeAction');
   const { shortLivedToken } = req.session || {};
   const { payload } = req.body as RequestBody;
 
@@ -88,20 +87,13 @@ async function executeAction(req: AuthenticatedRequest, res: Response): Promise<
 }
 
 async function executeMultiplication(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('executeMultiplication', req);
-
   const payload = req.body.payload || req.body;
   const shortLivedToken = payload.sessionToken || (req.session && req.session.shortLivedToken);
-  console.log('shortLivedToken', shortLivedToken);
-  console.log('payload', payload); // Debug what's coming in
 
   try {
     if (!shortLivedToken) {
       return res.status(401).send({ message: 'Unauthorized' });
     }
-
-    // Log the full request body for debugging
-    console.log('Multiplication request body:', JSON.stringify(req.body, null, 2));
 
     // Handle different payload formats
     let inputFields;
@@ -133,15 +125,9 @@ async function executeMultiplication(req: AuthenticatedRequest, res: Response): 
 
     // Extract column IDs from the input fields, making sourceColumnId and targetColumnId mutable
     const { factorColumnId } = inputFields;
-    let { sourceColumnId, targetColumnId } = inputFields;
+    let { sourceColumnId, targetColumnId, historyColumnId } = inputFields;
 
-    console.log('Processing multiplication with inputs:', {
-      boardId,
-      itemId,
-      sourceColumnId,
-      factorColumnId,
-      targetColumnId,
-    });
+    // Validate required fields
 
     // Validate required fields
     if (!sourceColumnId || !factorColumnId) {
@@ -154,12 +140,10 @@ async function executeMultiplication(req: AuthenticatedRequest, res: Response): 
 
     // If we don't have itemId, try to get it from the board
     if (!itemId && boardId) {
-      console.log('No item ID provided, attempting to use the first item from the board');
       // We'll directly get the board items instead of using a separate function
       const firstItem = await mondayService.getBoardItems(shortLivedToken, boardId);
       if (firstItem && firstItem.length > 0) {
         itemId = firstItem[0].id;
-        console.log(`Using first item from board: ${itemId}`);
       }
     }
 
@@ -169,27 +153,21 @@ async function executeMultiplication(req: AuthenticatedRequest, res: Response): 
     }
 
     if (!boardId) {
-      console.log('No board ID provided, attempting to find board ID for item');
       boardId = await mondayService.getBoardIdForItem(shortLivedToken, itemId);
 
       if (!boardId) {
         console.error('Could not determine board ID');
         return res.status(400).send({ message: 'Could not determine board ID' });
       }
-
-      console.log(`Determined board ID: ${boardId}`);
     }
 
     // If no target column specified, we'll use the source column
     if (!targetColumnId) {
-      console.log('No target column specified, using source column');
       targetColumnId = sourceColumnId;
     }
 
     const input_number = await mondayService.getColumnValueAsNumber(shortLivedToken, itemId, sourceColumnId);
     const factor_number = await mondayService.getColumnValueAsNumber(shortLivedToken, itemId, factorColumnId);
-
-    console.log('Extracted numbers:', { input_number, factor_number });
 
     // Check if either value is undefined or NaN
     if (
@@ -207,7 +185,6 @@ async function executeMultiplication(req: AuthenticatedRequest, res: Response): 
     }
 
     const result = Number(input_number) * Number(factor_number);
-    console.log('Multiplication result:', result);
 
     // The changeColumnValue service now handles formatting based on column type
     await mondayService.changeColumnValue(shortLivedToken, boardId, itemId, targetColumnId, result.toString());
@@ -230,6 +207,29 @@ async function executeMultiplication(req: AuthenticatedRequest, res: Response): 
 
     // Log the calculation to MongoDB
     await calculationService.logCalculation(calculationData);
+
+    // get existing history column value form mongodb
+    const existingHistory = await calculationService.getCalculationHistoryForItem(itemId, 10);
+
+    const refinedHistory = existingHistory.map((item) => {
+      return `${item.sourceValue} * ${item.factorValue} = ${item.result}`;
+    });
+
+    // append new calculation to existing history
+    const newHistory = [
+      ...refinedHistory,
+      `${calculationData.sourceValue} * ${calculationData.factorValue} = ${calculationData.result}`,
+    ];
+    const stringifiedHistory = newHistory.join(', ');
+
+    // Now update the history column
+    await mondayService.changeColumnValue(
+      shortLivedToken,
+      boardId,
+      itemId,
+      historyColumnId,
+      JSON.stringify(stringifiedHistory)
+    );
 
     // Handle different response formats based on request type
     if (payload.inboundFieldValues) {
@@ -256,7 +256,6 @@ async function executeMultiplication(req: AuthenticatedRequest, res: Response): 
 }
 
 async function handleTrigger(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('handle trigger');
   const { shortLivedToken } = req.session || {};
   const triggerData = req.body as TriggerPayload;
 
@@ -264,8 +263,6 @@ async function handleTrigger(req: AuthenticatedRequest, res: Response): Promise<
     if (!shortLivedToken) {
       return res.status(401).send({ message: 'Unauthorized' });
     }
-
-    console.log('Received trigger data:', JSON.stringify(triggerData, null, 2));
 
     const itemId = triggerData.payload.inputFields.itemId.toString();
 
@@ -296,7 +293,6 @@ async function handleTrigger(req: AuthenticatedRequest, res: Response): Promise<
 }
 
 async function getRemoteListOptions(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('getRemoteListOptions');
   try {
     return res.status(200).send(TRANSFORMATION_TYPES);
   } catch (err) {
@@ -306,13 +302,9 @@ async function getRemoteListOptions(req: AuthenticatedRequest, res: Response): P
 }
 
 async function subscribe(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('subscribe endpoint called');
   const { shortLivedToken } = req.session || {};
 
   try {
-    // Log the request body to help debugging
-    console.log('Subscribe request body:', JSON.stringify(req.body, null, 2));
-
     if (!shortLivedToken) {
       console.error('Authentication error: No shortLivedToken in session');
       return res.status(401).send({
@@ -357,18 +349,8 @@ async function subscribe(req: AuthenticatedRequest, res: Response): Promise<Resp
       });
     }
 
-    console.log('Subscription request processed from automation payload:', {
-      webhookUrl,
-      subscriptionId,
-      recipeId,
-      integrationId,
-      boardId: boardId ? Number(boardId) : undefined,
-      columnIds,
-    });
-
     // If we already have a subscription ID, no need to create a new one
     if (subscriptionId) {
-      console.log('Subscription already exists with ID:', subscriptionId);
       return res.status(200).send({
         message: 'Subscription already exists',
         subscriptionId,
@@ -407,7 +389,7 @@ async function subscribe(req: AuthenticatedRequest, res: Response): Promise<Resp
 }
 
 async function unsubscribe(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('unsubscribe');
+  ('unsubscribe');
   const { shortLivedToken } = req.session || {};
 
   try {
@@ -422,8 +404,6 @@ async function unsubscribe(req: AuthenticatedRequest, res: Response): Promise<Re
         message: 'Missing required parameter: subscriptionId',
       });
     }
-
-    console.log('Unsubscribing webhook:', subscriptionId);
 
     // Call Monday.com API to delete the subscription
     const success = await mondayService.deleteSubscription(shortLivedToken, subscriptionId);
@@ -447,8 +427,6 @@ async function unsubscribe(req: AuthenticatedRequest, res: Response): Promise<Re
 
 async function handleWebhook(req: Request, res: Response): Promise<Response> {
   try {
-    console.log('Received webhook:', JSON.stringify(req.body, null, 2));
-
     const webhookData = req.body;
 
     // You don't necessarily need authentication here as this is a webhook from Monday.com
@@ -492,7 +470,6 @@ async function handleWebhook(req: Request, res: Response): Promise<Response> {
 async function processItemCreation(webhookData: any): Promise<void> {
   try {
     const { event, itemId, boardId } = webhookData;
-    console.log(`Processing item creation: Item ${itemId} on Board ${boardId}`);
 
     // Implement your business logic for item creation here
     // For example, you might want to initialize certain column values or
@@ -505,7 +482,6 @@ async function processItemCreation(webhookData: any): Promise<void> {
 async function processColumnUpdate(webhookData: any): Promise<void> {
   try {
     const { event, itemId, boardId, columnId, value } = webhookData;
-    console.log(`Processing column update: Item ${itemId}, Column ${columnId}, New value: ${value}`);
 
     // Implement your business logic for column updates here
     // For example, you might want to trigger calculations or
@@ -516,7 +492,6 @@ async function processColumnUpdate(webhookData: any): Promise<void> {
 }
 
 async function listAllSubscriptions(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('listAllSubscriptions endpoint called');
   const { shortLivedToken } = req.session || {};
 
   try {
@@ -528,8 +503,6 @@ async function listAllSubscriptions(req: AuthenticatedRequest, res: Response): P
       });
     }
 
-    console.log('Requesting all subscriptions from Monday.com API');
-
     const subscriptions = await mondayService.listSubscriptions(shortLivedToken);
 
     if (!subscriptions) {
@@ -540,7 +513,6 @@ async function listAllSubscriptions(req: AuthenticatedRequest, res: Response): P
       });
     }
 
-    console.log(`Successfully retrieved ${subscriptions.length} subscriptions`);
     return res.status(200).send({
       message: 'Subscriptions retrieved successfully',
       count: subscriptions.length,
@@ -569,10 +541,9 @@ async function listAllSubscriptions(req: AuthenticatedRequest, res: Response): P
 
 // Add new endpoint to get calculation history for an item
 async function getItemCalculationHistory(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('getItemCalculationHistory');
   try {
     // Extract the itemId from the request
-    const itemId = req.params.itemId;
+    const itemId = req.body.inputFields.itemId;
 
     if (!itemId) {
       return res.status(400).send({ message: 'Missing item ID' });
@@ -580,8 +551,6 @@ async function getItemCalculationHistory(req: AuthenticatedRequest, res: Respons
 
     // Extract optional limit parameter
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
-
-    console.log(`Retrieving calculation history for item: ${itemId}`);
 
     // Get the calculation history for this item
     const history = await calculationService.getCalculationHistoryForItem(itemId, limit);
@@ -599,7 +568,6 @@ async function getItemCalculationHistory(req: AuthenticatedRequest, res: Respons
 
 // Add new endpoint to get calculation history for a board
 async function getBoardCalculationHistory(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('getBoardCalculationHistory');
   try {
     // Extract the boardId from the request
     const boardId = req.params.boardId;
@@ -610,8 +578,6 @@ async function getBoardCalculationHistory(req: AuthenticatedRequest, res: Respon
 
     // Extract optional limit parameter
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
-
-    console.log(`Retrieving calculation history for board: ${boardId}`);
 
     // Get the calculation history for this board
     const history = await calculationService.getCalculationHistoryForBoard(boardId, limit);
@@ -629,7 +595,6 @@ async function getBoardCalculationHistory(req: AuthenticatedRequest, res: Respon
 
 // Add new endpoint to get all calculation history with pagination
 async function getAllCalculationHistory(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('getAllCalculationHistory');
   try {
     // Extract pagination parameters
     const page = req.query.page ? parseInt(req.query.page as string) : 1;
@@ -637,8 +602,6 @@ async function getAllCalculationHistory(req: AuthenticatedRequest, res: Response
 
     // Get account ID from session if available for filtering
     const accountId = req.query.accountId || req.session?.accountId;
-
-    console.log(`Retrieving all calculation history (page ${page}, limit ${limit})`);
 
     // Get all calculation history with pagination
     const result = await calculationService.getAllCalculationHistory(limit, page, accountId as string);

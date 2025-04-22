@@ -76,14 +76,12 @@ const getColumnValueAsNumber = async (token: string, itemId: string, columnId: s
     const variables = { columnId, itemId };
 
     const response = (await mondayClient.api(query, { variables })) as ItemsResponse;
-    console.log('Raw column value response:', JSON.stringify(response?.data?.items?.[0]?.column_values?.[0], null, 2));
 
     if (response?.data?.items?.[0]?.column_values?.[0]) {
       const columnValue = response.data.items[0].column_values[0];
 
       // If text is available, try to parse it directly
       if (columnValue.text) {
-        console.log('Using text value for parsing:', columnValue.text);
         const parsedNumber = parseFloat(columnValue.text);
         if (!isNaN(parsedNumber)) {
           return parsedNumber;
@@ -92,7 +90,6 @@ const getColumnValueAsNumber = async (token: string, itemId: string, columnId: s
 
       // If value is available, try to parse it from the JSON value
       if (columnValue.value) {
-        console.log('Using JSON value for parsing:', columnValue.value);
         try {
           // Monday.com stores numbers as JSON objects with a "value" property
           const parsedJson = JSON.parse(columnValue.value);
@@ -100,10 +97,8 @@ const getColumnValueAsNumber = async (token: string, itemId: string, columnId: s
           // Handle different column types
           if (typeof parsedJson === 'object') {
             if (parsedJson.hasOwnProperty('value')) {
-              console.log('Found value property in JSON:', parsedJson.value);
               return parseFloat(parsedJson.value);
             } else if (parsedJson.hasOwnProperty('number')) {
-              console.log('Found number property in JSON:', parsedJson.number);
               return parseFloat(parsedJson.number);
             }
           } else if (typeof parsedJson === 'number') {
@@ -113,7 +108,6 @@ const getColumnValueAsNumber = async (token: string, itemId: string, columnId: s
           }
         } catch (jsonError) {
           // If the value is not valid JSON, try to parse it directly
-          console.log('Not valid JSON, trying direct parse:', columnValue.value);
           const directParse = parseFloat(columnValue.value);
           if (!isNaN(directParse)) {
             return directParse;
@@ -144,7 +138,6 @@ const changeColumnValue = async (
 
     // First, get the column type to format the value correctly
     const columnInfo = await getColumnInfo(token, boardId, columnId);
-    console.log('Column info for formatting:', columnInfo);
 
     // Format the value based on column type
     let formattedValue = value;
@@ -169,8 +162,6 @@ const changeColumnValue = async (
       }
       // Add more column types as needed
     }
-
-    console.log(`Sending formatted value for column type ${columnInfo?.type}:`, formattedValue);
 
     const query = `mutation change_column_value($boardId: ID!, $itemId: ID!, $columnId: String!, $value: JSON!) {
         change_column_value(board_id: $boardId, item_id: $itemId, column_id: $columnId, value: $value) {
@@ -319,11 +310,8 @@ const createSubscription = async (
       config,
     };
 
-    console.log('Creating subscription with variables:', JSON.stringify(variables, null, 2));
-
     try {
       const response = await mondayClient.api(query, { variables });
-      console.log('Subscription creation raw response:', JSON.stringify(response, null, 2));
 
       if (response?.data?.create_webhook?.id) {
         return response.data.create_webhook.id;
@@ -374,11 +362,8 @@ const deleteSubscription = async (token: string, subscriptionId: string): Promis
 
     const variables = { id: parsedId };
 
-    console.log('Deleting subscription with variables:', JSON.stringify(variables, null, 2));
-
     try {
       const response = await mondayClient.api(query, { variables });
-      console.log('Subscription deletion raw response:', JSON.stringify(response, null, 2));
 
       if (response?.data?.delete_webhook?.id) {
         return true;
@@ -430,7 +415,6 @@ const listSubscriptions = async (token: string): Promise<any[] | null> => {
     }`;
 
     const response = await mondayClient.api(query);
-    console.log('List subscriptions response:', response);
 
     if (response?.data?.webhooks) {
       return response.data.webhooks;
@@ -466,7 +450,6 @@ const getBoardItems = async (token: string, boardId: string): Promise<Item[] | u
     const variables = { boardId };
 
     const response = await mondayClient.api(query, { variables });
-    console.log('Board items query response:', JSON.stringify(response?.data?.boards?.[0]?.items?.length, null, 2));
 
     if (response?.data?.boards?.[0]?.items) {
       return response.data.boards[0].items;
