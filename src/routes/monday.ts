@@ -15,10 +15,11 @@ router.post('/monday/handle_trigger', authenticationMiddleware, logMiddleware, m
 
 router.post(
   '/monday/execute-multiplication',
-  // authenticationMiddleware,
+  authenticationMiddleware,
   logMiddleware,
   mondayController.executeMultiplication
 );
+router.post('/monday/calculate', logMiddleware, authenticationMiddleware, mondayController.executeMultiplication);
 
 router.post('/monday/subscribe', authenticationMiddleware, logMiddleware, mondayController.subscribe);
 router.post('/monday/unsubscribe', authenticationMiddleware, logMiddleware, mondayController.unsubscribe);

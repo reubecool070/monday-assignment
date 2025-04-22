@@ -88,9 +88,12 @@ async function executeAction(req: AuthenticatedRequest, res: Response): Promise<
 }
 
 async function executeMultiplication(req: AuthenticatedRequest, res: Response): Promise<Response> {
-  console.log('executeMultiplication');
-  const { shortLivedToken } = req.session || {};
+  console.log('executeMultiplication', req);
+
   const payload = req.body.payload || req.body;
+  const shortLivedToken = payload.sessionToken || (req.session && req.session.shortLivedToken);
+  console.log('shortLivedToken', shortLivedToken);
+  console.log('payload', payload); // Debug what's coming in
 
   try {
     if (!shortLivedToken) {
