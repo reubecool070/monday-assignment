@@ -1,94 +1,154 @@
+# Monday.com Calculation App
+
+A custom Monday.com app that performs calculations on number columns and maintains calculation history.
+
 ## Overview
 
-This is the "Quickstart Integration" example Monday app.
-<br>It can be used as a board recipe, which transforms data from one text column to another
+This app listens to changes in a number column, performs a calculation based on a custom multiplication factor, and updates another column with the result. The app includes an item view that allows users to:
 
-<br>This app demonstrates how to use the:
+- Set a custom multiplication factor per item
+- Manually trigger recalculations
+- View a history of calculations
 
-- integration recipe
-- custom action
-- call authentication with JWT
-- query monday API using short lived token (seamless authentication)
-- remote options for custom fields
-- MongoDB for storing calculation history
+The app integrates with Monday boards to provide a seamless calculation experience while maintaining a log of all operations.
 
-<br>You can follow along in our [Quickstart guide](https://developer.monday.com/apps/docs/quickstart-integration) or use the instructions below.
-<br>![Screenshot](https://dapulse-res.cloudinary.com/image/upload/v1658942490/remote_mondaycom_static/developers/screenshots/QUICKSTART_GIPHY.gif)
+## Features
 
-## Install
+- **Automatic Calculations**: Automatically multiplies values in the input_number column by a custom factor when changes are detected
+- **Custom Multiplication Factor**: Each item can have its own multiplication factor set through the item view
+- **Calculation History**: View a log of past calculations for each item
+- **Manual Recalculation**: Trigger manual recalculations with a button in the item view
+- **Error Handling**: Built-in retry mechanism for failed updates with error logging
 
-1. Make sure you have Node (v16.16+), npm, and MongoDB installed
+## Technologies Used
 
-2. Install the dependencies:
+### Backend
 
-```
-$ npm install
-```
+- **Node.js** with **Express.js**: For the server application
+- **TypeScript**: For type-safe code
+- **MongoDB** with **Mongoose**: For data storage and retrieval
+- **Monday.com API**: For board and column interactions
+- **Webhooks**: For listening to column value changes
 
-3. Make sure MongoDB is running on your system or provide a connection string in the `.env` file
+### Frontend
 
-## Configure your Monday App
+- **React**: For the item view UI
+- **TypeScript**: For type safety
+- **@vibe/core & @vibe/icons**: Monday's design system components
+- **Monday SDK**: For interaction with the Monday.com platform
 
-### Part One: Create a new app and integration feature
+## Architecture
 
-1. Open monday.com, login to your account and go to a "Developers" section.
-2. Create new app - name it "Integration Example App"
-3. Open "Features" section and create new "Integration" feature
-4. Choose the "Quickstart Integration - NodeJS" template to start. Add in the missing scopes, run the command scaffold in your command line, and paste the resulting URL into the URL box.
+The application consists of:
 
-<br>![Screenshot](https://dapulse-res.cloudinary.com/image/upload/v1659026516/integration_template.gif)
+1. **Webhook Listener**: Detects changes in Monday.com board columns
+2. **API Server**: Processes webhooks and provides endpoints for the frontend
+3. **Database**: Stores calculation history and item-specific multiplication factors
+4. **Item View Component**: Provides a UI within Monday.com for interacting with the app
 
-### Part Two: Update your integration's basic information
+## Getting Started
 
-In the feature editor, open the "Feature Details" tab. This tab allows you to add a title and description to your custom integration recipe. The user will see the title and description when they see your recipe in the Integrations Center.
+### Prerequisites
 
-<br>![Screenshot](https://dapulse-res.cloudinary.com/image/upload/v1659026704/ee5c6e5-Quickstart_1.png)
+- Node.js (v16.16+)
+- npm
+- MongoDB
+- Monday.com developer account
 
-### Part Three: Recipe configuration
+### Installation
 
-Our new feature templates provide the integration recipe for you, so it is ready to go.
+1. Clone the repository
 
-<br>![Screenshot](https://dapulse-res.cloudinary.com/image/upload/v1659026804/ecd8711-Recipe.png)
-
-This integration utilizes a custom action that calls our API to update a second text column. If you want to see the code behind this recipe, navigate into the "quickstart-integrations" folder downloaded onto your computer after you ran the command line prompt in Part 1.
-
-In short, integrations run off of triggers that invoke certain actions. These triggers are the conditions that must be met before an action can take place.
-
-## Part Four: Run the project
-
-1. Add your MONDAY_SIGNING_SECRET to .env file
-   <br> \*\* To get your MONDAY_SIGNING_SECRET go to monday.com, open Developers section, open your app and find the Signing Secret in "Basic Information" section
-   <br> ![Screenshot](https://dapulse-res.cloudinary.com/image/upload/f_auto,q_auto/remote_mondaycom_static/uploads/VladMystetskyi/4db4f03e-67a5-482d-893e-033db67ee09b_monday-Apps2020-05-1901-31-26.png)
-2. Run the server using the monday tunnel:
-
-```
-$ npm run dev
-```
-
-### Part Five: Using the custom integration recipe
-
-You're done! Head to any of your boards to add the integration recipe by searching for its name (in this example the integration name is "New Feature").
-
-Follow the integration recipe prompts as normal (selecting which Text columns you want) and watch the magic unfold!
-
-## Calculation History with MongoDB
-
-This integration now includes a calculation history feature that logs all calculations to a MongoDB database. This allows users to view a history of past calculations.
-
-### Setting up MongoDB
-
-1. Install MongoDB on your local machine or use a cloud MongoDB provider
-2. Set your MongoDB connection string in the `.env` file:
    ```
+   git clone https://github.com/yourusername/monday-calculation-app.git
+   cd monday-calculation-app
+   ```
+
+2. Install dependencies
+
+   ```
+   npm install
+   ```
+
+3. Set up environment variables in a `.env` file
+
+   ```
+   MONDAY_SIGNING_SECRET=your_signing_secret
    MONGODB_URI=mongodb://localhost:27017/monday-calculations
    ```
 
-### Accessing Calculation History
+4. Start the development server
+   ```
+   npm run dev
+   ```
 
-The integration provides several API endpoints to access calculation history:
+### Monday.com App Setup
 
-- `GET /monday/calculations` - Get all calculation history with pagination
-- `GET /monday/board/:boardId/calculations` - Get calculation history for a specific board
-- `GET /monday/item/:itemId/calculations` - Get calculation history for a specific item
+1. Create a new app in Monday.com's Developer Center
+2. Add the "Custom Item View" feature
+3. Add the "Integration" feature
+4. Configure the webhook URL to point to your server
+5. Add the required scopes:
+   - me:read
+   - boards:read
+   - boards:write
+   - webhooks:write
 
-These endpoints can be used to display calculation history in the Monday.com UI using a custom app.
+## Usage
+
+### Board Setup
+
+1. Create two number columns in your Monday.com board: `input_number` and `result_number`
+2. Install the app to your Monday.com workspace
+3. Add the integration recipe to your board
+
+### Item View
+
+1. Open an item on your board
+2. Click on the app's icon in the item view panel
+3. Enter a custom multiplication factor
+4. The result will automatically update when the input number changes
+5. View the calculation history in the table below
+
+## API Endpoints
+
+- `POST /monday/webhook`: Webhook endpoint for Monday.com events
+- `GET /monday/item/:itemId/factor`: Get multiplication factor for an item
+- `POST /monday/item/:itemId/factor`: Update multiplication factor for an item
+- `GET /monday/item/:itemId/calculations`: Get calculation history for an item
+- `POST /monday/item/:itemId/calculate`: Manually trigger calculation for an item
+
+## Development
+
+### Project Structure
+
+```
+/
+├── src/
+│   ├── api/            # API endpoints
+│   ├── components/     # React components for the item view
+│   ├── models/         # MongoDB models
+│   ├── services/       # Business logic
+│   ├── types/          # TypeScript type definitions
+│   ├── utils/          # Utility functions
+│   ├── App.tsx         # Main React component
+│   └── index.tsx       # Entry point
+├── .env                # Environment variables
+├── tsconfig.json       # TypeScript configuration
+└── README.md           # Project documentation
+```
+
+### Building for Production
+
+```
+npm run build
+```
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgements
+
+- Monday.com Developer Platform
+- Monday Vibe Design System
